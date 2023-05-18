@@ -2,9 +2,10 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 import json
 from channels.db import database_sync_to_async
-from .models import  Message,  Members
+from .models import  Message,  Members , Room
 from rest_framework.authtoken.models import Token
 from channels.db import database_sync_to_async
+from django.contrib.auth.models import User
 
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -32,7 +33,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
         text_data = json.loads(text_data)
         message = text_data['message']
         room = text_data['room']
-        list_of_tokens =  await self.get_list(room)
+        sender = text_data['sender']
+        list_of_tokens =  await self.get_list(room,message)
 
                 
 
@@ -41,7 +43,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 list_of_tokens, {
                     'type' : 'chat_msg', # function to handle incomming msg
                     'chat' : message, # //message that will come.
-                    'room_id' : room
+                    'room_id' : room,
+                    'sender' : sender
                 }   
 
             )
@@ -49,21 +52,29 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def chat_msg(self , event):
         msg = event['chat']
         room_id = event['room_id']
+        sender = event['sender']
+
         
 
         await self.send(text_data=json.dumps({
-                'msg' : msg ,
-                'room_id' : room_id
+                'text' : msg ,
+                'sender' : sender,
+                'roomName' : room_id,
         }))
 
     @database_sync_to_async
-    def get_list(self, name):
+    def get_list(self, name , message):
         try:
             return_token = None
             members = Members.objects.filter(room__name=name)
             users = members.values_list('user', flat=True)
             tokens = Token.objects.filter(user__in=users)
             list_of_tokens = tokens.values_list('key', flat=True)
+            room = Room.objects.get(name=name)
+            sender = User.objects.get(auth_token=self.scope['url_route']['kwargs']['token'])
+            message = Message.objects.create(room=room , sender=sender , text = message)
+            message.save()
+
             for token in list_of_tokens:
                 if token != self.scope['url_route']['kwargs']['token']:
                     return_token = token

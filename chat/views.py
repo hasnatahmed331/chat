@@ -85,12 +85,15 @@ def home(request):
     user = request.user
 
     member_of = Members.objects.filter(user=user)
+
     if not member_of:
         return Response({'details' : 'you are not member of any room'})
     
     rooms = [member.room for member in member_of]
+    # users = User.objects.filter(members__room__in=rooms).exclude(pk=request.user.pk)
     serializer = RoomSerializer(rooms , many=True)
-    return Response({'rooms' : serializer.data})
+    # user_serializer = UserProfileSerializer(users , many = True)
+    return Response({'rooms' : serializer.data})    
 
 
 @api_view(['GET'])
@@ -111,15 +114,18 @@ def create_room(request):
         member = Members.objects.create(room=room)
         member.user.add(user)
         return Response({'details' : 'room created'})
+
     else:
             member, created = Members.objects.get_or_create(room=room)
             member.user.add(user)
-            now = datetime.now()
-            one_hour_ago = now - timedelta(hours=1)
-            messages = Message.objects.filter(room = room , created_at__gte=one_hour_ago)
+            room = Room.objects.get(name=name)
+
+            messages = Message.objects.filter(room = room)
+
+            
             if not messages:
                 return Response({})
-            serializer = MessageSerializer(messages)
+            serializer = MessageSerializer(messages , many = True)
             return Response({'messages' : serializer.data})
     
 
